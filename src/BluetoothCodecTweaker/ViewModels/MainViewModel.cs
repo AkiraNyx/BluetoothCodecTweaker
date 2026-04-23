@@ -143,6 +143,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
         var activeOption = CodecOptions.FirstOrDefault(c => c.IsActive);
         if (activeOption is not null)
             SelectedCodec = activeOption.Info;
+        else
+            SelectedCodec = CodecOptions.FirstOrDefault(c => c.IsEnabled)?.Info;
     }
 
     private bool CanSwitchCodec() =>

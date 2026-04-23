@@ -86,7 +86,7 @@
                         </ItemsRepeater.Layout>
                         <ItemsRepeater.ItemTemplate>
                             <DataTemplate>
-                                <Grid Padding="16" CornerRadius="6"
+                                <Grid Padding="16" CornerRadius="6" Tapped="OnCodecCardTapped"
                                       Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
                                       BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}" BorderThickness="1">
                                     <Grid.ColumnDefinitions>
