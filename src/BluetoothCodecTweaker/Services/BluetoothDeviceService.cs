@@ -24,20 +24,15 @@ public sealed class BluetoothDeviceService : IDisposable
         }
     }
 
-    public async Task EnumerateDevicesAsync()
+    public async Task<List<BluetoothAudioDevice>> EnumerateDevicesAsync()
     {
-        await _lock.WaitAsync();
-        try { _devices.Clear(); }
-        finally { _lock.Release(); }
-
+        var result = new List<BluetoothAudioDevice>();
         StatusChanged?.Invoke("正在搜索蓝牙设备...");
 
         int totalFound = 0;
-        int audioFound = 0;
 
         try
         {
-            // Get all paired Bluetooth devices via FindAllAsync (one-shot, reliable)
             var selector = BluetoothDevice.GetDeviceSelectorFromPairingState(true);
             var deviceInfoCollection = await DeviceInformation.FindAllAsync(selector);
 
@@ -63,7 +58,7 @@ public sealed class BluetoothDeviceService : IDisposable
                     var supportedCodecs = DetectSupportedCodecs(btDevice.BluetoothAddress);
                     var activeCodec = isConnected ? await DetectActiveCodecAsync(btDevice.BluetoothAddress) : null;
 
-                    var device = new BluetoothAudioDevice
+                    result.Add(new BluetoothAudioDevice
                     {
                         Id = info.Id,
                         Name = string.IsNullOrWhiteSpace(btDevice.Name) ? "(未知设备)" : btDevice.Name,
@@ -71,12 +66,7 @@ public sealed class BluetoothDeviceService : IDisposable
                         IsConnected = isConnected,
                         ActiveCodec = activeCodec,
                         SupportedCodecs = supportedCodecs,
-                    };
-
-                    await _lock.WaitAsync();
-                    try { _devices[info.Id] = device; }
-                    finally { _lock.Release(); }
-                    audioFound++;
+                    });
                 }
                 catch
                 {
@@ -87,13 +77,12 @@ public sealed class BluetoothDeviceService : IDisposable
         catch (Exception ex)
         {
             StatusChanged?.Invoke($"蓝牙搜索失败: {ex.Message}");
-            DevicesChanged?.Invoke();
-            return;
+            return result;
         }
 
-        if (audioFound > 0)
+        if (result.Count > 0)
         {
-            StatusChanged?.Invoke($"已找到 {audioFound} 个蓝牙音频设备（共 {totalFound} 个蓝牙设备）");
+            StatusChanged?.Invoke($"已找到 {result.Count} 个蓝牙音频设备（共 {totalFound} 个蓝牙设备）");
         }
         else if (totalFound > 0)
         {
@@ -104,7 +93,7 @@ public sealed class BluetoothDeviceService : IDisposable
             StatusChanged?.Invoke("未找到已配对的蓝牙设备，请确认蓝牙已开启且设备已配对");
         }
 
-        DevicesChanged?.Invoke();
+        return result;
     }
 
     private static bool IsAudioDevice(BluetoothDevice btDevice)

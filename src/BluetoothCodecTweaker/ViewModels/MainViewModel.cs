@@ -50,8 +50,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         _deviceService = new BluetoothDeviceService();
         _codecService = new CodecSwitchService();
 
-        _deviceService.StatusChanged += OnStatusChanged;
-        _deviceService.DevicesChanged += OnDevicesChanged;
+        _deviceService.StatusChanged += msg => _dispatcherQueue.TryEnqueue(() => StatusMessage = msg);
     }
 
     [RelayCommand]
@@ -61,8 +60,9 @@ public partial class MainViewModel : ObservableObject, IDisposable
         StatusMessage = "正在初始化蓝牙搜索...";
         try
         {
-            await _deviceService.EnumerateDevicesAsync();
-            SyncDevicesList();
+            var devices = await _deviceService.EnumerateDevicesAsync();
+            Devices.Clear();
+            foreach (var d in devices) Devices.Add(d);
             _deviceService.StartWatching();
         }
         catch (Exception ex)
@@ -82,18 +82,21 @@ public partial class MainViewModel : ObservableObject, IDisposable
         try
         {
             _deviceService.StopWatching();
-            await _deviceService.EnumerateDevicesAsync();
-            SyncDevicesList();
+            var devices = await _deviceService.EnumerateDevicesAsync();
+            var previousSelectedId = SelectedDevice?.Id;
+            Devices.Clear();
+            foreach (var d in devices) Devices.Add(d);
             _deviceService.StartWatching();
 
+            if (previousSelectedId is not null)
+            {
+                SelectedDevice = Devices.FirstOrDefault(d => d.Id == previousSelectedId);
+            }
+
             if (Devices.Count > 0)
-            {
                 ShowInfoBar("刷新完成", StatusMessage, InfoBarState.Success);
-            }
             else
-            {
                 ShowInfoBar("未找到设备", StatusMessage, InfoBarState.Warning);
-            }
         }
         catch (Exception ex)
         {
@@ -101,40 +104,6 @@ public partial class MainViewModel : ObservableObject, IDisposable
             ShowInfoBar("刷新失败", StatusMessage, InfoBarState.Error);
         }
         IsLoading = false;
-    }
-
-    private void SyncDevicesList()
-    {
-        var previousSelectedId = SelectedDevice?.Id;
-        var deviceList = _deviceService.Devices;
-
-        Devices.Clear();
-        foreach (var device in deviceList)
-        {
-            Devices.Add(device);
-        }
-
-        if (previousSelectedId is not null)
-        {
-            var updated = Devices.FirstOrDefault(d => d.Id == previousSelectedId);
-            if (updated is not null)
-            {
-                SelectedDevice = updated;
-            }
-        }
-    }
-
-    private void OnStatusChanged(string message)
-    {
-        _dispatcherQueue.TryEnqueue(() =>
-        {
-            StatusMessage = message;
-        });
-    }
-
-    private void OnDevicesChanged()
-    {
-        _dispatcherQueue.TryEnqueue(SyncDevicesList);
     }
 
     partial void OnSelectedDeviceChanged(BluetoothAudioDevice? value)
