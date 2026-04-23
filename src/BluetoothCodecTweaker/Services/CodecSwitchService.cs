@@ -16,37 +16,24 @@ public enum CodecSwitchResult
 
 public sealed class CodecSwitchService
 {
-    // Registry paths for Bluetooth A2DP codec configuration
     private const string BthA2dpParamsPath = @"SYSTEM\CurrentControlSet\Services\BthA2dp\Parameters";
-    private const string BthPortDevicesPath = @"SYSTEM\CurrentControlSet\Services\BTHPORT\Parameters\Devices";
 
     public async Task<CodecSwitchResult> SwitchCodecAsync(BluetoothAudioDevice device, AudioCodecType targetCodec)
     {
         if (!device.IsConnected)
             return CodecSwitchResult.DeviceNotConnected;
 
-        if (!device.SupportsCodec(targetCodec))
-            return CodecSwitchResult.CodecNotSupported;
-
-        if (device.ActiveCodec == targetCodec)
-            return CodecSwitchResult.Success;
-
         try
         {
-            // Step 1: Update codec preference in registry
             bool registryUpdated = SetCodecPreference(device.BluetoothAddress, targetCodec);
             if (!registryUpdated)
                 return CodecSwitchResult.RegistryAccessDenied;
 
-            // Step 2: Restart Bluetooth connection to trigger codec re-negotiation
-            bool reconnected = await ReconnectDeviceAsync(device);
+            bool reconnected = await ReconnectBluetoothAsync(device.BluetoothAddress);
             if (!reconnected)
                 return CodecSwitchResult.ReconnectFailed;
 
-            // Step 3: Verify active codec changed
-            await Task.Delay(2000); // Wait for codec negotiation
-            device.ActiveCodec = targetCodec;
-
+            // Don't fake ActiveCodec — ETW will detect the real codec after reconnection
             return CodecSwitchResult.Success;
         }
         catch
@@ -59,26 +46,21 @@ public sealed class CodecSwitchService
     {
         try
         {
-            string addressHex = bluetoothAddress.ToString("x12");
-
-            // Set per-device codec preference
-            string devicePath = $@"{BthA2dpParamsPath}\{addressHex}";
-            using var deviceKey = Registry.LocalMachine.CreateSubKey(devicePath, RegistryKeyPermissionCheck.ReadWriteSubTree);
-            if (deviceKey is null) return false;
-
-            deviceKey.SetValue("PreferredCodec", codec.ToString(), RegistryValueKind.String);
-            deviceKey.SetValue("SelectedCodecId", (int)codec, RegistryValueKind.DWord);
-
-            // Set global codec priority to prefer the selected codec
+            // Set global codec enable/disable flags
+            // SBC is mandatory (A2DP spec), always keep enabled
             using var globalKey = Registry.LocalMachine.CreateSubKey(BthA2dpParamsPath, RegistryKeyPermissionCheck.ReadWriteSubTree);
-            if (globalKey is not null)
+            if (globalKey is null) return false;
+
+            globalKey.SetValue("SBCEnabled", 1, RegistryValueKind.DWord); // Always on
+            globalKey.SetValue("AACEnabled", codec == AudioCodecType.AAC ? 1 : 0, RegistryValueKind.DWord);
+            globalKey.SetValue("AptXEnabled", codec == AudioCodecType.AptX ? 1 : 0, RegistryValueKind.DWord);
+            globalKey.SetValue("AptXHDEnabled", codec == AudioCodecType.AptXHD ? 1 : 0, RegistryValueKind.DWord);
+            globalKey.SetValue("LDACEnabled", codec == AudioCodecType.LDAC ? 1 : 0, RegistryValueKind.DWord);
+
+            // If target is SBC, disable all others to force SBC
+            if (codec == AudioCodecType.SBC)
             {
-                // Codec enable/disable flags
-                globalKey.SetValue("SBCEnabled", codec == AudioCodecType.SBC ? 1 : 0, RegistryValueKind.DWord);
-                globalKey.SetValue("AACEnabled", codec is AudioCodecType.AAC or AudioCodecType.SBC ? 1 : 0, RegistryValueKind.DWord);
-                globalKey.SetValue("AptXEnabled", codec is AudioCodecType.AptX or AudioCodecType.SBC ? 1 : 0, RegistryValueKind.DWord);
-                globalKey.SetValue("AptXHDEnabled", codec is AudioCodecType.AptXHD or AudioCodecType.SBC ? 1 : 0, RegistryValueKind.DWord);
-                globalKey.SetValue("LDACEnabled", codec is AudioCodecType.LDAC or AudioCodecType.SBC ? 1 : 0, RegistryValueKind.DWord);
+                globalKey.SetValue("AACEnabled", 0, RegistryValueKind.DWord);
             }
 
             return true;
@@ -93,39 +75,48 @@ public sealed class CodecSwitchService
         }
     }
 
-    private static async Task<bool> ReconnectDeviceAsync(BluetoothAudioDevice device)
+    private static async Task<bool> ReconnectBluetoothAsync(ulong bluetoothAddress)
     {
         try
         {
-            // Use pnputil / devcon equivalent to cycle the Bluetooth device connection
-            // Disconnect by disabling then re-enabling the device via PowerShell/WMI
-            string addressHex = device.BluetoothAddress.ToString("X12");
-            string formattedAddr = string.Join("", Enumerable.Range(0, 6)
-                .Select(i => addressHex.Substring(i * 2, 2)));
+            string addressHex = bluetoothAddress.ToString("x12");
 
-            // Use Bluetooth COM API to disconnect and reconnect
-            var disconnectProcess = new ProcessStartInfo
+            string script =
+                "$addr = '" + addressHex + "'; " +
+                "$devices = Get-PnpDevice -ErrorAction SilentlyContinue | " +
+                "Where-Object { $_.InstanceId -like '*BTHENUM*' -and ($_.InstanceId -replace '[^0-9a-fA-F]','') -match $addr }; " +
+                "if (-not $devices) { " +
+                "  $radio = Get-PnpDevice -Class Bluetooth -ErrorAction SilentlyContinue | " +
+                "  Where-Object { $_.InstanceId -notlike '*BTHENUM*' -and $_.Status -eq 'OK' } | Select-Object -First 1; " +
+                "  if ($radio) { " +
+                "    Disable-PnpDevice -InstanceId $radio.InstanceId -Confirm:$false; " +
+                "    Start-Sleep -Seconds 3; " +
+                "    Enable-PnpDevice -InstanceId $radio.InstanceId -Confirm:$false; " +
+                "    Write-Host 'OK' } " +
+                "  else { Write-Host 'NOTFOUND' } " +
+                "} else { " +
+                "  foreach ($dev in $devices) { Disable-PnpDevice -InstanceId $dev.InstanceId -Confirm:$false -ErrorAction SilentlyContinue } " +
+                "  Start-Sleep -Seconds 3; " +
+                "  foreach ($dev in $devices) { Enable-PnpDevice -InstanceId $dev.InstanceId -Confirm:$false -ErrorAction SilentlyContinue } " +
+                "  Write-Host 'OK' }";
+
+            var psi = new ProcessStartInfo
             {
                 FileName = "powershell.exe",
-                Arguments = $"-NoProfile -Command \"" +
-                    $"$device = Get-PnpDevice | Where-Object {{ $_.InstanceId -like '*{formattedAddr}*' -and $_.Class -eq 'Bluetooth' }}; " +
-                    $"if ($device) {{ Disable-PnpDevice -InstanceId $device.InstanceId -Confirm:$false; " +
-                    $"Start-Sleep -Seconds 2; " +
-                    $"Enable-PnpDevice -InstanceId $device.InstanceId -Confirm:$false }}\"",
+                Arguments = $"-NoProfile -Command \"{script}\"",
                 CreateNoWindow = true,
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
             };
 
-            using var process = Process.Start(disconnectProcess);
-            if (process is not null)
-            {
-                await process.WaitForExitAsync();
-                return process.ExitCode == 0;
-            }
+            using var process = Process.Start(psi);
+            if (process is null) return false;
 
-            return false;
+            string output = await process.StandardOutput.ReadToEndAsync();
+            await process.WaitForExitAsync();
+
+            return output.Contains("OK");
         }
         catch
         {
@@ -133,28 +124,19 @@ public sealed class CodecSwitchService
         }
     }
 
-    public static AudioCodecType GetFallbackCodec()
-    {
-        return AudioCodecType.AAC;
-    }
+    public static AudioCodecType GetFallbackCodec() => AudioCodecType.AAC;
 
     public static string GetSwitchResultMessage(CodecSwitchResult result, AudioCodecType targetCodec)
     {
         var codecInfo = AudioCodecInfo.FromType(targetCodec);
         return result switch
         {
-            CodecSwitchResult.Success =>
-                $"已成功切换至 {codecInfo.DisplayName}",
-            CodecSwitchResult.DeviceNotConnected =>
-                "设备未连接，无法切换编码",
-            CodecSwitchResult.CodecNotSupported =>
-                $"设备不支持 {codecInfo.DisplayName}，建议使用 {AudioCodecInfo.FromType(GetFallbackCodec()).DisplayName}",
-            CodecSwitchResult.RegistryAccessDenied =>
-                "注册表访问被拒绝，请以管理员身份运行应用",
-            CodecSwitchResult.ReconnectFailed =>
-                "设备重连失败，请手动断开并重新连接蓝牙设备",
-            CodecSwitchResult.UnknownError =>
-                "发生未知错误，请重试",
+            CodecSwitchResult.Success => $"已设置偏好编码为 {codecInfo.DisplayName}，蓝牙正在重连中，播放音频后可确认实际编码",
+            CodecSwitchResult.DeviceNotConnected => "设备未连接，无法切换编码",
+            CodecSwitchResult.CodecNotSupported => $"设备不支持 {codecInfo.DisplayName}，建议使用 {AudioCodecInfo.FromType(GetFallbackCodec()).DisplayName}",
+            CodecSwitchResult.RegistryAccessDenied => "注册表访问被拒绝，请以管理员身份运行应用",
+            CodecSwitchResult.ReconnectFailed => "蓝牙重连失败，请手动在系统设置中断开并重连蓝牙设备",
+            CodecSwitchResult.UnknownError => "发生未知错误，请重试",
             _ => "未知状态",
         };
     }
