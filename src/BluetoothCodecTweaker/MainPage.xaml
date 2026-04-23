@@ -174,7 +174,7 @@
                         Style="{StaticResource BodyTextBlockStyle}"
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                     <TextBlock
-                        Text="{x:Bind ViewModel.SelectedDevice.ActiveCodecDisplay, Mode=OneWay}"
+                        Text="{x:Bind ViewModel.SelectedDevice.ActiveCodecDisplay, Mode=OneWay, FallbackValue=''}"
                         Style="{StaticResource SubtitleTextBlockStyle}"
                         Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
                 </StackPanel>
@@ -185,7 +185,7 @@
                         Style="{StaticResource BodyTextBlockStyle}"
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                     <TextBlock
-                        Text="{x:Bind ViewModel.SelectedDevice.ConnectionStatusDisplay, Mode=OneWay}"
+                        Text="{x:Bind ViewModel.SelectedDevice.ConnectionStatusDisplay, Mode=OneWay, FallbackValue=''}"
                         Style="{StaticResource SubtitleTextBlockStyle}" />
                 </StackPanel>
             </Grid>
