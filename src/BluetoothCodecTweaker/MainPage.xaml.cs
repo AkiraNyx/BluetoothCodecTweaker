@@ -15,8 +15,8 @@ public sealed partial class MainPage : Page
         Loaded += OnLoaded;
     }
 
-    private void OnLoaded(object sender, RoutedEventArgs e)
+    private async void OnLoaded(object sender, RoutedEventArgs e)
     {
-        ViewModel.InitializeCommand.Execute(null);
+        await ViewModel.InitializeCommand.ExecuteAsync(null);
     }
 }

@@ -11,6 +11,7 @@ public sealed class BluetoothDeviceService : IDisposable
     private readonly Dictionary<string, BluetoothAudioDevice> _devices = [];
     private readonly SemaphoreSlim _lock = new(1, 1);
 
+    public event Action<string>? StatusChanged;
     public event Action? DevicesChanged;
 
     public IReadOnlyList<BluetoothAudioDevice> Devices
@@ -23,35 +24,124 @@ public sealed class BluetoothDeviceService : IDisposable
         }
     }
 
+    public async Task EnumerateDevicesAsync()
+    {
+        await _lock.WaitAsync();
+        try { _devices.Clear(); }
+        finally { _lock.Release(); }
+
+        StatusChanged?.Invoke("正在搜索蓝牙设备...");
+
+        int totalFound = 0;
+        int audioFound = 0;
+
+        try
+        {
+            // Get all paired Bluetooth devices via FindAllAsync (one-shot, reliable)
+            var selector = BluetoothDevice.GetDeviceSelectorFromPairingState(true);
+            var deviceInfoCollection = await DeviceInformation.FindAllAsync(selector);
+
+            totalFound = deviceInfoCollection.Count;
+            StatusChanged?.Invoke($"发现 {totalFound} 个已配对蓝牙设备，正在筛选音频设备...");
+
+            foreach (var info in deviceInfoCollection)
+            {
+                try
+                {
+                    var btDevice = await BluetoothDevice.FromIdAsync(info.Id);
+                    if (btDevice is null) continue;
+
+                    bool isAudio = IsAudioDevice(btDevice);
+                    if (!isAudio) continue;
+
+                    bool isConnected = false;
+                    if (info.Properties.TryGetValue("System.Devices.Aep.IsConnected", out var connObj))
+                    {
+                        isConnected = connObj is true;
+                    }
+
+                    var supportedCodecs = DetectSupportedCodecs(btDevice.BluetoothAddress);
+                    var activeCodec = isConnected ? await DetectActiveCodecAsync(btDevice.BluetoothAddress) : null;
+
+                    var device = new BluetoothAudioDevice
+                    {
+                        Id = info.Id,
+                        Name = string.IsNullOrWhiteSpace(btDevice.Name) ? "(未知设备)" : btDevice.Name,
+                        BluetoothAddress = btDevice.BluetoothAddress,
+                        IsConnected = isConnected,
+                        ActiveCodec = activeCodec,
+                        SupportedCodecs = supportedCodecs,
+                    };
+
+                    await _lock.WaitAsync();
+                    try { _devices[info.Id] = device; }
+                    finally { _lock.Release(); }
+                    audioFound++;
+                }
+                catch
+                {
+                    // Skip devices that fail to load
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            StatusChanged?.Invoke($"蓝牙搜索失败: {ex.Message}");
+            DevicesChanged?.Invoke();
+            return;
+        }
+
+        if (audioFound > 0)
+        {
+            StatusChanged?.Invoke($"已找到 {audioFound} 个蓝牙音频设备（共 {totalFound} 个蓝牙设备）");
+        }
+        else if (totalFound > 0)
+        {
+            StatusChanged?.Invoke($"发现 {totalFound} 个蓝牙设备，但未检测到音频设备");
+        }
+        else
+        {
+            StatusChanged?.Invoke("未找到已配对的蓝牙设备，请确认蓝牙已开启且设备已配对");
+        }
+
+        DevicesChanged?.Invoke();
+    }
+
+    private static bool IsAudioDevice(BluetoothDevice btDevice)
+    {
+        // Check by Class of Device: AudioVideo major class covers headphones, speakers, etc.
+        if (btDevice.ClassOfDevice.MajorClass == BluetoothMajorClass.AudioVideo)
+            return true;
+
+        // Some devices (e.g. multi-function) may not report AudioVideo as major class
+        // but have audio-related minor class or service class bits
+        var serviceCapabilities = btDevice.ClassOfDevice.ServiceCapabilities;
+        if (serviceCapabilities.HasFlag(BluetoothServiceCapabilities.AudioService) ||
+            serviceCapabilities.HasFlag(BluetoothServiceCapabilities.RenderingService) ||
+            serviceCapabilities.HasFlag(BluetoothServiceCapabilities.CapturingService))
+            return true;
+
+        return false;
+    }
+
     public void StartWatching()
     {
         if (_watcher is not null) return;
 
         try
         {
-            string aqsFilter = BluetoothDevice.GetDeviceSelectorFromPairingState(true);
-            string[] requestedProperties =
-            [
-                "System.Devices.Aep.IsConnected",
-                "System.Devices.Aep.DeviceAddress",
-            ];
+            var selector = BluetoothDevice.GetDeviceSelectorFromPairingState(true);
+            string[] requestedProperties = ["System.Devices.Aep.IsConnected"];
 
             _watcher = DeviceInformation.CreateWatcher(
-                aqsFilter,
+                selector,
                 requestedProperties,
                 DeviceInformationKind.AssociationEndpoint);
 
-            _watcher.Added += OnDeviceAdded;
             _watcher.Updated += OnDeviceUpdated;
-            _watcher.Removed += OnDeviceRemoved;
-            _watcher.EnumerationCompleted += (_, _) => DevicesChanged?.Invoke();
             _watcher.Start();
         }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"[BluetoothDeviceService] StartWatching failed: {ex.Message}");
-            DevicesChanged?.Invoke();
-        }
+        catch { }
     }
 
     public void StopWatching()
@@ -60,23 +150,10 @@ public sealed class BluetoothDeviceService : IDisposable
         try
         {
             if (_watcher.Status is DeviceWatcherStatus.Started or DeviceWatcherStatus.EnumerationCompleted)
-            {
                 _watcher.Stop();
-            }
         }
         catch { }
         _watcher = null;
-    }
-
-    private async void OnDeviceAdded(DeviceWatcher sender, DeviceInformation info)
-    {
-        var device = await CreateDeviceFromInfoAsync(info);
-        if (device is null) return;
-
-        await _lock.WaitAsync();
-        try { _devices[info.Id] = device; }
-        finally { _lock.Release(); }
-        DevicesChanged?.Invoke();
     }
 
     private async void OnDeviceUpdated(DeviceWatcher sender, DeviceInformationUpdate update)
@@ -101,50 +178,6 @@ public sealed class BluetoothDeviceService : IDisposable
         DevicesChanged?.Invoke();
     }
 
-    private async void OnDeviceRemoved(DeviceWatcher sender, DeviceInformationUpdate update)
-    {
-        await _lock.WaitAsync();
-        try { _devices.Remove(update.Id); }
-        finally { _lock.Release(); }
-        DevicesChanged?.Invoke();
-    }
-
-    private static async Task<BluetoothAudioDevice?> CreateDeviceFromInfoAsync(DeviceInformation info)
-    {
-        try
-        {
-            var btDevice = await BluetoothDevice.FromIdAsync(info.Id);
-            if (btDevice is null) return null;
-
-            // Filter: only keep audio devices (AudioVideo major class)
-            if (btDevice.ClassOfDevice.MajorClass != BluetoothMajorClass.AudioVideo)
-                return null;
-
-            bool isConnected = false;
-            if (info.Properties.TryGetValue("System.Devices.Aep.IsConnected", out var connObj))
-            {
-                isConnected = connObj is true;
-            }
-
-            var supportedCodecs = DetectSupportedCodecs(btDevice.BluetoothAddress);
-            var activeCodec = isConnected ? await DetectActiveCodecAsync(btDevice.BluetoothAddress) : null;
-
-            return new BluetoothAudioDevice
-            {
-                Id = info.Id,
-                Name = btDevice.Name,
-                BluetoothAddress = btDevice.BluetoothAddress,
-                IsConnected = isConnected,
-                ActiveCodec = activeCodec,
-                SupportedCodecs = supportedCodecs,
-            };
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
     private static List<AudioCodecType> DetectSupportedCodecs(ulong bluetoothAddress)
     {
         var codecs = new List<AudioCodecType> { AudioCodecType.SBC };
@@ -152,16 +185,14 @@ public sealed class BluetoothDeviceService : IDisposable
         try
         {
             string addressHex = bluetoothAddress.ToString("x12");
-            string registryPath = $@"SYSTEM\CurrentControlSet\Services\BTHPORT\Parameters\Devices\{addressHex}";
 
+            string registryPath = $@"SYSTEM\CurrentControlSet\Services\BTHPORT\Parameters\Devices\{addressHex}";
             using var key = Registry.LocalMachine.OpenSubKey(registryPath);
             if (key is not null)
             {
                 var codecValue = key.GetValue("SupportedCodecs");
                 if (codecValue is byte[] codecBytes)
-                {
                     ParseSupportedCodecs(codecBytes, codecs);
-                }
             }
 
             if (!codecs.Contains(AudioCodecType.AAC))
@@ -207,13 +238,13 @@ public sealed class BluetoothDeviceService : IDisposable
 
             switch (codecType)
             {
-                case 0x00: // SBC
+                case 0x00:
                     break;
-                case 0x02: // AAC
+                case 0x02:
                     if (!codecs.Contains(AudioCodecType.AAC))
                         codecs.Add(AudioCodecType.AAC);
                     break;
-                case 0xFF: // Vendor-specific
+                case 0xFF:
                     if (infoLength >= 6 && offset + 2 + 6 <= data.Length)
                     {
                         uint vendorId = BitConverter.ToUInt32(data, offset + 2);

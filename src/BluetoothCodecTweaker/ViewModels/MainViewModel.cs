@@ -49,45 +49,65 @@ public partial class MainViewModel : ObservableObject, IDisposable
         _dispatcherQueue = dispatcherQueue;
         _deviceService = new BluetoothDeviceService();
         _codecService = new CodecSwitchService();
+
+        _deviceService.StatusChanged += OnStatusChanged;
         _deviceService.DevicesChanged += OnDevicesChanged;
     }
 
     [RelayCommand]
-    private void Initialize()
+    private async Task InitializeAsync()
     {
         IsLoading = true;
-        StatusMessage = "正在搜索蓝牙音频设备...";
+        await _deviceService.EnumerateDevicesAsync();
         _deviceService.StartWatching();
+        IsLoading = false;
     }
 
     [RelayCommand]
     private async Task RefreshDevicesAsync()
     {
         IsLoading = true;
-        StatusMessage = "正在刷新设备列表...";
+        HideInfoBar();
         _deviceService.StopWatching();
-        await Task.Delay(500);
+        await _deviceService.EnumerateDevicesAsync();
         _deviceService.StartWatching();
+        IsLoading = false;
+
+        if (Devices.Count > 0)
+        {
+            ShowInfoBar("刷新完成", StatusMessage, InfoBarState.Success);
+        }
+        else
+        {
+            ShowInfoBar("未找到设备", StatusMessage, InfoBarState.Warning);
+        }
+    }
+
+    private void OnStatusChanged(string message)
+    {
+        _dispatcherQueue.TryEnqueue(() =>
+        {
+            StatusMessage = message;
+        });
     }
 
     private void OnDevicesChanged()
     {
         _dispatcherQueue.TryEnqueue(() =>
         {
+            var previousSelectedId = SelectedDevice?.Id;
             var deviceList = _deviceService.Devices;
+
             Devices.Clear();
             foreach (var device in deviceList)
             {
                 Devices.Add(device);
             }
-            IsLoading = false;
-            StatusMessage = Devices.Count > 0
-                ? $"已找到 {Devices.Count} 个蓝牙音频设备"
-                : "未找到已配对的蓝牙音频设备";
 
-            if (SelectedDevice is not null)
+            // Re-select previously selected device if still present
+            if (previousSelectedId is not null)
             {
-                var updated = Devices.FirstOrDefault(d => d.Id == SelectedDevice.Id);
+                var updated = Devices.FirstOrDefault(d => d.Id == previousSelectedId);
                 if (updated is not null)
                 {
                     SelectedDevice = updated;
