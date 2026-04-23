@@ -58,8 +58,17 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private async Task InitializeAsync()
     {
         IsLoading = true;
-        await _deviceService.EnumerateDevicesAsync();
-        _deviceService.StartWatching();
+        StatusMessage = "正在初始化蓝牙搜索...";
+        try
+        {
+            await _deviceService.EnumerateDevicesAsync();
+            _deviceService.StartWatching();
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"初始化失败: {ex.Message}";
+            ShowInfoBar("初始化失败", StatusMessage, InfoBarState.Error);
+        }
         IsLoading = false;
     }
 
@@ -68,19 +77,28 @@ public partial class MainViewModel : ObservableObject, IDisposable
     {
         IsLoading = true;
         HideInfoBar();
-        _deviceService.StopWatching();
-        await _deviceService.EnumerateDevicesAsync();
-        _deviceService.StartWatching();
-        IsLoading = false;
+        StatusMessage = "正在刷新...";
+        try
+        {
+            _deviceService.StopWatching();
+            await _deviceService.EnumerateDevicesAsync();
+            _deviceService.StartWatching();
 
-        if (Devices.Count > 0)
-        {
-            ShowInfoBar("刷新完成", StatusMessage, InfoBarState.Success);
+            if (Devices.Count > 0)
+            {
+                ShowInfoBar("刷新完成", StatusMessage, InfoBarState.Success);
+            }
+            else
+            {
+                ShowInfoBar("未找到设备", StatusMessage, InfoBarState.Warning);
+            }
         }
-        else
+        catch (Exception ex)
         {
-            ShowInfoBar("未找到设备", StatusMessage, InfoBarState.Warning);
+            StatusMessage = $"刷新失败: {ex.Message}";
+            ShowInfoBar("刷新失败", StatusMessage, InfoBarState.Error);
         }
+        IsLoading = false;
     }
 
     private void OnStatusChanged(string message)

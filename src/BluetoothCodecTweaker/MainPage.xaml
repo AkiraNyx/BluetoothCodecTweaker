@@ -60,6 +60,7 @@
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
                 <Grid Grid.Row="0" Margin="0,0,0,12">
@@ -95,8 +96,17 @@
                     Visibility="{x:Bind ViewModel.IsLoading, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
                     Margin="0,0,0,8" />
 
-                <ComboBox
+                <!-- Status text (always visible) -->
+                <TextBlock
                     Grid.Row="2"
+                    Text="{x:Bind ViewModel.StatusMessage, Mode=OneWay}"
+                    Style="{StaticResource CaptionTextBlockStyle}"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    TextWrapping="WrapWholeWords"
+                    Margin="0,0,0,8" />
+
+                <ComboBox
+                    Grid.Row="3"
                     x:Name="DeviceSelector"
                     HorizontalAlignment="Stretch"
                     PlaceholderText="请选择蓝牙音频设备"
