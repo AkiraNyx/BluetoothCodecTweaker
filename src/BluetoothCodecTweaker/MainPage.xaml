@@ -16,302 +16,117 @@
     </Page.Resources>
 
     <ScrollViewer VerticalScrollBarVisibility="Auto">
-        <StackPanel
-            Padding="36,24,36,36"
-            Spacing="16"
-            MaxWidth="800">
+        <StackPanel Padding="36,24,36,36" Spacing="16" MaxWidth="800">
 
-            <!-- Header -->
-            <TextBlock
-                Text="蓝牙音频编码管理"
-                Style="{StaticResource TitleTextBlockStyle}" />
-            <TextBlock
-                Text="选择蓝牙音频设备并配置音频编码（Codec）"
+            <TextBlock Text="蓝牙音频编码管理" Style="{StaticResource TitleTextBlockStyle}" />
+            <TextBlock Text="选择蓝牙音频设备并配置音频编码（Codec）"
                 Style="{StaticResource BodyTextBlockStyle}"
                 Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
 
-            <!-- Info Bar -->
             <InfoBar
-                x:Name="StatusInfoBar"
                 Title="{x:Bind ViewModel.InfoBarTitle, Mode=OneWay}"
                 Message="{x:Bind ViewModel.InfoBarMessage, Mode=OneWay}"
                 Severity="{x:Bind ViewModel.InfoBarState, Mode=OneWay, Converter={StaticResource InfoBarSeverityConverter}}"
                 IsOpen="{x:Bind ViewModel.InfoBarState, Mode=OneWay, Converter={StaticResource InfoBarVisibilityConverter}}"
-                IsClosable="True">
-                <InfoBar.ActionButton>
-                    <Button
-                        Content="切换至 AAC"
-                        Command="{x:Bind ViewModel.FallbackToAacCommand}"
-                        Visibility="{x:Bind ViewModel.ShowFallbackButton, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
-                </InfoBar.ActionButton>
-            </InfoBar>
+                IsClosable="True" />
 
-            <!-- Device Selection Card -->
-            <Grid
-                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                BorderThickness="1"
-                CornerRadius="8"
-                Padding="20">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                </Grid.RowDefinitions>
+            <!-- Device Selection -->
+            <Grid Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                  BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8" Padding="20">
+                <StackPanel Spacing="12">
+                    <Grid>
+                        <TextBlock Text="蓝牙音频设备" Style="{StaticResource SubtitleTextBlockStyle}" />
+                        <Button HorizontalAlignment="Right" Command="{x:Bind ViewModel.RefreshDevicesCommand}"
+                                ToolTipService.ToolTip="刷新" Style="{StaticResource SubtleButtonStyle}">
+                            <FontIcon Glyph="&#xE72C;" FontSize="14" />
+                        </Button>
+                    </Grid>
 
-                <Grid Grid.Row="0" Margin="0,0,0,12">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
+                    <ProgressBar IsIndeterminate="True"
+                        Visibility="{x:Bind ViewModel.IsLoading, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
 
-                    <FontIcon
-                        Grid.Column="0"
-                        Glyph="&#xE702;"
-                        FontSize="20"
-                        Margin="0,0,12,0"
-                        Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
-                    <TextBlock
-                        Grid.Column="1"
-                        Text="蓝牙音频设备"
-                        Style="{StaticResource SubtitleTextBlockStyle}"
-                        VerticalAlignment="Center" />
-                    <Button
-                        Grid.Column="2"
-                        Command="{x:Bind ViewModel.RefreshDevicesCommand}"
-                        ToolTipService.ToolTip="刷新设备列表"
-                        Style="{StaticResource SubtleButtonStyle}">
-                        <FontIcon Glyph="&#xE72C;" FontSize="14" />
-                    </Button>
-                </Grid>
+                    <TextBlock Text="{x:Bind ViewModel.StatusMessage, Mode=OneWay}"
+                        Style="{StaticResource CaptionTextBlockStyle}"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="WrapWholeWords" />
 
-                <ProgressBar
-                    Grid.Row="1"
-                    IsIndeterminate="True"
-                    Visibility="{x:Bind ViewModel.IsLoading, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
-                    Margin="0,0,0,8" />
-
-                <TextBlock
-                    Grid.Row="2"
-                    Text="{x:Bind ViewModel.StatusMessage, Mode=OneWay}"
-                    Style="{StaticResource CaptionTextBlockStyle}"
-                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                    TextWrapping="WrapWholeWords"
-                    Margin="0,0,0,8" />
-
-                <ComboBox
-                    Grid.Row="3"
-                    x:Name="DeviceSelector"
-                    HorizontalAlignment="Stretch"
-                    PlaceholderText="请选择蓝牙音频设备"
-                    DisplayMemberPath="Name"
-                    SelectedItem="{x:Bind ViewModel.SelectedDevice, Mode=TwoWay}" />
+                    <ComboBox x:Name="DeviceSelector" HorizontalAlignment="Stretch"
+                        PlaceholderText="请选择蓝牙音频设备" DisplayMemberPath="Name"
+                        SelectedItem="{x:Bind ViewModel.SelectedDevice, Mode=TwoWay}" />
+                </StackPanel>
             </Grid>
 
-            <!-- Device Info Card -->
-            <Grid
-                Visibility="{x:Bind ViewModel.HasSelectedDevice, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
-                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                BorderThickness="1"
-                CornerRadius="8"
-                Padding="20">
+            <!-- Device Info -->
+            <Grid Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                  BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8" Padding="20"
+                  Visibility="{x:Bind ViewModel.HasSelectedDevice, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-
-                <StackPanel Grid.Column="0">
-                    <TextBlock
-                        Text="当前编码"
-                        Style="{StaticResource BodyTextBlockStyle}"
-                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                    <TextBlock
-                        Text="{x:Bind ViewModel.SelectedDeviceCodecDisplay, Mode=OneWay}"
-                        Style="{StaticResource SubtitleTextBlockStyle}"
-                        Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                <StackPanel>
+                    <TextBlock Text="当前编码" Style="{StaticResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock Text="{x:Bind ViewModel.SelectedDeviceCodecDisplay, Mode=OneWay}" Style="{StaticResource SubtitleTextBlockStyle}" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
                 </StackPanel>
-
                 <StackPanel Grid.Column="1" HorizontalAlignment="Right">
-                    <TextBlock
-                        Text="连接状态"
-                        Style="{StaticResource BodyTextBlockStyle}"
-                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                    <TextBlock
-                        Text="{x:Bind ViewModel.SelectedDeviceConnectionDisplay, Mode=OneWay}"
-                        Style="{StaticResource SubtitleTextBlockStyle}" />
+                    <TextBlock Text="连接状态" Style="{StaticResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock Text="{x:Bind ViewModel.SelectedDeviceConnectionDisplay, Mode=OneWay}" Style="{StaticResource SubtitleTextBlockStyle}" />
                 </StackPanel>
             </Grid>
 
-            <!-- Codec Selection Card -->
-            <Grid
-                Visibility="{x:Bind ViewModel.HasSelectedDevice, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
-                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                BorderThickness="1"
-                CornerRadius="8"
-                Padding="20">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                </Grid.RowDefinitions>
+            <!-- Codec Selection -->
+            <Grid Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                  BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8" Padding="20"
+                  Visibility="{x:Bind ViewModel.HasSelectedDevice, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                <StackPanel Spacing="16">
+                    <TextBlock Text="选择音频编码" Style="{StaticResource SubtitleTextBlockStyle}" />
 
-                <Grid Grid.Row="0" Margin="0,0,0,16">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
+                    <ItemsRepeater ItemsSource="{x:Bind ViewModel.CodecOptions}">
+                        <ItemsRepeater.Layout>
+                            <StackLayout Spacing="8" />
+                        </ItemsRepeater.Layout>
+                        <ItemsRepeater.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Padding="16" CornerRadius="6"
+                                      Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                                      BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}" BorderThickness="1">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
 
-                    <FontIcon
-                        Grid.Column="0"
-                        Glyph="&#xE8D6;"
-                        FontSize="20"
-                        Margin="0,0,12,0"
-                        Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
-                    <TextBlock
-                        Grid.Column="1"
-                        Text="选择音频编码"
-                        Style="{StaticResource SubtitleTextBlockStyle}"
-                        VerticalAlignment="Center" />
-                </Grid>
+                                    <RadioButton GroupName="CodecSelection"
+                                        IsChecked="{Binding IsActive}" IsEnabled="{Binding IsEnabled}"
+                                        VerticalAlignment="Center" MinWidth="0" Margin="0,0,8,0" />
 
-                <ListView
-                    Grid.Row="1"
-                    ItemsSource="{x:Bind ViewModel.CodecOptions}"
-                    SelectionMode="None">
-                    <ListView.ItemTemplate>
-                        <DataTemplate>
-                            <Grid Padding="12,8" ColumnSpacing="12">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-
-                                <RadioButton
-                                    Grid.Column="0"
-                                    GroupName="CodecSelection"
-                                    IsChecked="{Binding IsActive}"
-                                    IsEnabled="{Binding IsEnabled}"
-                                    Margin="0,0,4,0"
-                                    VerticalAlignment="Center"
-                                    MinWidth="0" />
-
-                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                                    <StackPanel Orientation="Horizontal" Spacing="8">
-                                        <TextBlock
-                                            Text="{Binding DisplayName}"
-                                            Style="{StaticResource BodyStrongTextBlockStyle}" />
-
-                                        <Border
-                                            Padding="8,2"
-                                            CornerRadius="4"
-                                            Background="{ThemeResource SystemFillColorSuccessBackgroundBrush}"
-                                            Visibility="{Binding IsActive, Converter={StaticResource BoolToVisibilityConverter}}">
-                                            <TextBlock
-                                                Text="使用中"
-                                                FontSize="11"
-                                                Foreground="{ThemeResource SystemFillColorSuccessBrush}" />
-                                        </Border>
-
-                                        <Border
-                                            Padding="8,2"
-                                            CornerRadius="4"
-                                            Background="{ThemeResource SystemFillColorCautionBackgroundBrush}"
-                                            Visibility="{Binding IsNativelySupported, Converter={StaticResource BoolToVisibilityConverter}, ConverterParameter=Invert}">
-                                            <TextBlock
-                                                Text="非原生"
-                                                FontSize="11"
-                                                Foreground="{ThemeResource SystemFillColorCautionBrush}" />
-                                        </Border>
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                        <TextBlock Text="{Binding DisplayName}" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                        <TextBlock Text="{Binding Description}" Style="{StaticResource CaptionTextBlockStyle}"
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="WrapWholeWords" MaxLines="2" />
                                     </StackPanel>
 
-                                    <TextBlock
-                                        Text="{Binding Description}"
-                                        Style="{StaticResource CaptionTextBlockStyle}"
-                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                        TextWrapping="WrapWholeWords"
-                                        MaxLines="2" />
-                                </StackPanel>
+                                    <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="12,0">
+                                        <TextBlock Text="{Binding BitrateDisplay}" Style="{StaticResource CaptionTextBlockStyle}"
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" HorizontalAlignment="Right" />
+                                        <TextBlock Text="{Binding QualityDisplay}" Style="{StaticResource CaptionTextBlockStyle}"
+                                            Foreground="{ThemeResource TextFillColorTertiaryBrush}" HorizontalAlignment="Right" />
+                                    </StackPanel>
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsRepeater.ItemTemplate>
+                    </ItemsRepeater>
 
-                                <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="12,0" HorizontalAlignment="Right">
-                                    <TextBlock
-                                        Text="{Binding BitrateDisplay}"
-                                        Style="{StaticResource CaptionTextBlockStyle}"
-                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                        HorizontalAlignment="Right" />
-                                    <TextBlock
-                                        Text="{Binding QualityDisplay}"
-                                        Style="{StaticResource CaptionTextBlockStyle}"
-                                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                                        HorizontalAlignment="Right" />
-                                </StackPanel>
-
-                                <TextBlock
-                                    Grid.Column="3"
-                                    Text="{Binding IsSupported, Converter={StaticResource SupportStatusConverter}}"
-                                    VerticalAlignment="Center"
-                                    FontSize="12"
-                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                            </Grid>
-                        </DataTemplate>
-                    </ListView.ItemTemplate>
-                </ListView>
-
-                <Grid Grid.Row="2" Margin="0,20,0,0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-
-                    <ProgressRing
-                        Grid.Column="0"
-                        IsActive="{x:Bind ViewModel.IsSwitching, Mode=OneWay}"
-                        Visibility="{x:Bind ViewModel.IsSwitching, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
-                        Width="20"
-                        Height="20"
-                        HorizontalAlignment="Left" />
-
-                    <Button
-                        Grid.Column="1"
-                        Content="应用编码"
-                        Style="{StaticResource AccentButtonStyle}"
-                        Command="{x:Bind ViewModel.SwitchCodecCommand}"
-                        MinWidth="120" />
-                </Grid>
+                    <Button Content="应用编码" Style="{StaticResource AccentButtonStyle}"
+                        Command="{x:Bind ViewModel.SwitchCodecCommand}" HorizontalAlignment="Right" MinWidth="120" />
+                </StackPanel>
             </Grid>
 
-            <!-- LDAC Info Card -->
-            <Grid
-                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                BorderThickness="1"
-                CornerRadius="8"
-                Padding="20">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-
-                <FontIcon
-                    Grid.Column="0"
-                    Glyph="&#xE946;"
-                    FontSize="20"
-                    Margin="0,0,12,0"
-                    Foreground="{ThemeResource SystemFillColorCautionBrush}"
-                    VerticalAlignment="Top" />
-
-                <StackPanel Grid.Column="1" Spacing="4">
-                    <TextBlock
-                        Text="关于 LDAC 支持"
-                        Style="{StaticResource BodyStrongTextBlockStyle}" />
-                    <TextBlock
-                        TextWrapping="WrapWholeWords"
-                        Style="{StaticResource CaptionTextBlockStyle}"
+            <!-- LDAC Info -->
+            <Grid Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                  BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8" Padding="20">
+                <StackPanel Spacing="4">
+                    <TextBlock Text="关于 LDAC 支持" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                    <TextBlock TextWrapping="WrapWholeWords" Style="{StaticResource CaptionTextBlockStyle}"
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}">
                         <Run Text="LDAC 是 Sony 开发的高解析度蓝牙音频编码，Windows 11 尚未原生支持。本应用通过修改系统蓝牙 A2DP 参数来尝试启用 LDAC 编码。" />
                         <LineBreak />
