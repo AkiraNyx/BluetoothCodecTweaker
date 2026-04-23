@@ -49,12 +49,7 @@ public sealed class BluetoothDeviceService : IDisposable
                     bool isAudio = IsAudioDevice(btDevice);
                     if (!isAudio) continue;
 
-                    bool isConnected = false;
-                    if (info.Properties.TryGetValue("System.Devices.Aep.IsConnected", out var connObj))
-                    {
-                        isConnected = connObj is true;
-                    }
-
+                    bool isConnected = btDevice.ConnectionStatus == BluetoothConnectionStatus.Connected;
                     var supportedCodecs = DetectSupportedCodecs(btDevice.BluetoothAddress);
                     var activeCodec = isConnected ? await DetectActiveCodecAsync(btDevice.BluetoothAddress) : null;
 
