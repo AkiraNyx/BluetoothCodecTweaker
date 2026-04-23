@@ -1,6 +1,5 @@
 using BluetoothCodecTweaker.Models;
 using Microsoft.Win32;
-using System.Runtime.InteropServices;
 using Windows.Devices.Bluetooth;
 using Windows.Devices.Enumeration;
 
@@ -30,16 +29,18 @@ public sealed class BluetoothDeviceService : IDisposable
 
         try
         {
-            // AQS filter for Bluetooth A2DP audio devices (AudioRender)
             string aqsFilter = BluetoothDevice.GetDeviceSelectorFromPairingState(true);
             string[] requestedProperties =
             [
                 "System.Devices.Aep.IsConnected",
                 "System.Devices.Aep.DeviceAddress",
-                "System.Devices.Aep.Bluetooth.Le.IsConnectable",
             ];
 
-            _watcher = DeviceInformation.CreateWatcher(aqsFilter, requestedProperties);
+            _watcher = DeviceInformation.CreateWatcher(
+                aqsFilter,
+                requestedProperties,
+                DeviceInformationKind.AssociationEndpoint);
+
             _watcher.Added += OnDeviceAdded;
             _watcher.Updated += OnDeviceUpdated;
             _watcher.Removed += OnDeviceRemoved;
@@ -56,24 +57,24 @@ public sealed class BluetoothDeviceService : IDisposable
     public void StopWatching()
     {
         if (_watcher is null) return;
-        if (_watcher.Status is DeviceWatcherStatus.Started or DeviceWatcherStatus.EnumerationCompleted)
+        try
         {
-            _watcher.Stop();
+            if (_watcher.Status is DeviceWatcherStatus.Started or DeviceWatcherStatus.EnumerationCompleted)
+            {
+                _watcher.Stop();
+            }
         }
+        catch { }
         _watcher = null;
     }
 
     private async void OnDeviceAdded(DeviceWatcher sender, DeviceInformation info)
     {
+        var device = await CreateDeviceFromInfoAsync(info);
+        if (device is null) return;
+
         await _lock.WaitAsync();
-        try
-        {
-            var device = await CreateDeviceFromInfoAsync(info);
-            if (device is not null)
-            {
-                _devices[info.Id] = device;
-            }
-        }
+        try { _devices[info.Id] = device; }
         finally { _lock.Release(); }
         DevicesChanged?.Invoke();
     }
@@ -85,14 +86,12 @@ public sealed class BluetoothDeviceService : IDisposable
         {
             if (_devices.TryGetValue(update.Id, out var existing))
             {
-                bool isConnected = false;
                 if (update.Properties.TryGetValue("System.Devices.Aep.IsConnected", out var connObj))
                 {
-                    isConnected = connObj is true;
+                    existing.IsConnected = connObj is true;
                 }
-                existing.IsConnected = isConnected;
 
-                if (isConnected)
+                if (existing.IsConnected)
                 {
                     existing.ActiveCodec = await DetectActiveCodecAsync(existing.BluetoothAddress);
                 }
@@ -116,6 +115,10 @@ public sealed class BluetoothDeviceService : IDisposable
         {
             var btDevice = await BluetoothDevice.FromIdAsync(info.Id);
             if (btDevice is null) return null;
+
+            // Filter: only keep audio devices (AudioVideo major class)
+            if (btDevice.ClassOfDevice.MajorClass != BluetoothMajorClass.AudioVideo)
+                return null;
 
             bool isConnected = false;
             if (info.Properties.TryGetValue("System.Devices.Aep.IsConnected", out var connObj))
@@ -144,7 +147,6 @@ public sealed class BluetoothDeviceService : IDisposable
 
     private static List<AudioCodecType> DetectSupportedCodecs(ulong bluetoothAddress)
     {
-        // All Bluetooth A2DP devices must support SBC as mandatory codec
         var codecs = new List<AudioCodecType> { AudioCodecType.SBC };
 
         try
@@ -155,7 +157,6 @@ public sealed class BluetoothDeviceService : IDisposable
             using var key = Registry.LocalMachine.OpenSubKey(registryPath);
             if (key is not null)
             {
-                // Check for supported codec flags/service records
                 var codecValue = key.GetValue("SupportedCodecs");
                 if (codecValue is byte[] codecBytes)
                 {
@@ -163,11 +164,9 @@ public sealed class BluetoothDeviceService : IDisposable
                 }
             }
 
-            // Heuristic: most modern BT audio devices support AAC
             if (!codecs.Contains(AudioCodecType.AAC))
                 codecs.Add(AudioCodecType.AAC);
 
-            // Check per-device codec support from A2DP service records
             string a2dpPath = $@"SYSTEM\CurrentControlSet\Services\BthA2dp\Parameters\{addressHex}";
             using var a2dpKey = Registry.LocalMachine.OpenSubKey(a2dpPath);
             if (a2dpKey is not null)
@@ -190,7 +189,6 @@ public sealed class BluetoothDeviceService : IDisposable
         }
         catch
         {
-            // Fallback: at minimum SBC + AAC
             if (!codecs.Contains(AudioCodecType.AAC))
                 codecs.Add(AudioCodecType.AAC);
         }
@@ -200,8 +198,6 @@ public sealed class BluetoothDeviceService : IDisposable
 
     private static void ParseSupportedCodecs(byte[] data, List<AudioCodecType> codecs)
     {
-        // Parse A2DP Service Capability codec entries
-        // Format: codec type (1 byte) + codec info length (1 byte) + codec info
         int offset = 0;
         while (offset < data.Length - 1)
         {
@@ -211,13 +207,13 @@ public sealed class BluetoothDeviceService : IDisposable
 
             switch (codecType)
             {
-                case 0x00: // SBC (already added)
+                case 0x00: // SBC
                     break;
-                case 0x02: // AAC / MPEG-2,4
+                case 0x02: // AAC
                     if (!codecs.Contains(AudioCodecType.AAC))
                         codecs.Add(AudioCodecType.AAC);
                     break;
-                case 0xFF: // Vendor-specific (aptX, aptX HD, LDAC, etc.)
+                case 0xFF: // Vendor-specific
                     if (infoLength >= 6 && offset + 2 + 6 <= data.Length)
                     {
                         uint vendorId = BitConverter.ToUInt32(data, offset + 2);
