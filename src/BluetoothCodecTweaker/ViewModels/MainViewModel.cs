@@ -62,6 +62,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         try
         {
             await _deviceService.EnumerateDevicesAsync();
+            SyncDevicesList();
             _deviceService.StartWatching();
         }
         catch (Exception ex)
@@ -82,6 +83,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         {
             _deviceService.StopWatching();
             await _deviceService.EnumerateDevicesAsync();
+            SyncDevicesList();
             _deviceService.StartWatching();
 
             if (Devices.Count > 0)
@@ -101,6 +103,27 @@ public partial class MainViewModel : ObservableObject, IDisposable
         IsLoading = false;
     }
 
+    private void SyncDevicesList()
+    {
+        var previousSelectedId = SelectedDevice?.Id;
+        var deviceList = _deviceService.Devices;
+
+        Devices.Clear();
+        foreach (var device in deviceList)
+        {
+            Devices.Add(device);
+        }
+
+        if (previousSelectedId is not null)
+        {
+            var updated = Devices.FirstOrDefault(d => d.Id == previousSelectedId);
+            if (updated is not null)
+            {
+                SelectedDevice = updated;
+            }
+        }
+    }
+
     private void OnStatusChanged(string message)
     {
         _dispatcherQueue.TryEnqueue(() =>
@@ -111,27 +134,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     private void OnDevicesChanged()
     {
-        _dispatcherQueue.TryEnqueue(() =>
-        {
-            var previousSelectedId = SelectedDevice?.Id;
-            var deviceList = _deviceService.Devices;
-
-            Devices.Clear();
-            foreach (var device in deviceList)
-            {
-                Devices.Add(device);
-            }
-
-            // Re-select previously selected device if still present
-            if (previousSelectedId is not null)
-            {
-                var updated = Devices.FirstOrDefault(d => d.Id == previousSelectedId);
-                if (updated is not null)
-                {
-                    SelectedDevice = updated;
-                }
-            }
-        });
+        _dispatcherQueue.TryEnqueue(SyncDevicesList);
     }
 
     partial void OnSelectedDeviceChanged(BluetoothAudioDevice? value)
