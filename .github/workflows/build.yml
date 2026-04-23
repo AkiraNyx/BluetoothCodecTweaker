@@ -8,6 +8,7 @@ on:
   workflow_dispatch:
 
 env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   PROJECT_PATH: src/BluetoothCodecTweaker/BluetoothCodecTweaker.csproj
   PUBLISHER: CN=AkiraNyx
 
