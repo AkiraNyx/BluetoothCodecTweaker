@@ -69,7 +69,7 @@ public sealed class AudioCodecInfo
 
     // A2DP Vendor-specific codec identifiers
     // LDAC: Sony Vendor ID = 0x054C, Codec ID = 0x00AA
-    public static readonly uint LdacVendorId = 0x054C;
+    public static readonly uint LdacVendorId = 0x012D;
     public static readonly ushort LdacCodecId = 0x00AA;
 
     // aptX: Qualcomm Vendor ID = 0x004F (CSR), Codec ID = 0x0001

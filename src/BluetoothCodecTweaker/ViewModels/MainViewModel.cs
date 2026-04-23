@@ -10,6 +10,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
 {
     private readonly BluetoothDeviceService _deviceService;
     private readonly CodecSwitchService _codecService;
+    private readonly EtwCodecDetectionService _etwService;
     private readonly Microsoft.UI.Dispatching.DispatcherQueue _dispatcherQueue;
 
     public ObservableCollection<BluetoothAudioDevice> Devices { get; } = [];
@@ -57,11 +58,31 @@ public partial class MainViewModel : ObservableObject, IDisposable
         _dispatcherQueue = dispatcherQueue;
         _deviceService = new BluetoothDeviceService();
         _codecService = new CodecSwitchService();
+        _etwService = new EtwCodecDetectionService();
 
         _deviceService.StatusChanged += msg =>
         {
             if (_dispatcherQueue is not null)
                 _dispatcherQueue.TryEnqueue(() => StatusMessage = msg);
+        };
+
+        _etwService.CodecDetected += info =>
+        {
+            _dispatcherQueue.TryEnqueue(() =>
+            {
+                if (SelectedDevice is not null && info.CodecType is { } codecType)
+                {
+                    SelectedDevice.ActiveCodec = codecType;
+                    OnPropertyChanged(nameof(SelectedDeviceCodecDisplay));
+                    UpdateCodecOptions();
+                }
+            });
+        };
+
+        _etwService.Error += msg =>
+        {
+            _dispatcherQueue.TryEnqueue(() =>
+                ShowInfoBar("编码检测", msg, InfoBarState.Warning));
         };
     }
 
@@ -77,6 +98,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
             foreach (var d in devices)
                 Devices.Add(d);
             _deviceService.StartWatching();
+            _etwService.Start();
         }
         catch (Exception ex)
         {
@@ -230,6 +252,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     public void Dispose()
     {
+        _etwService.Dispose();
         _deviceService.Dispose();
     }
 }

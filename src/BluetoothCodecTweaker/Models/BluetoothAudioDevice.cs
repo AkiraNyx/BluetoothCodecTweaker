@@ -22,7 +22,7 @@ public sealed class BluetoothAudioDevice
 
     public string ActiveCodecDisplay => ActiveCodec is { } codec
         ? AudioCodecInfo.FromType(codec).DisplayName
-        : "未知";
+        : "正在检测（播放音频后自动识别）";
 
     public string ConnectionStatusDisplay => IsConnected ? "已连接" : "未连接";
 

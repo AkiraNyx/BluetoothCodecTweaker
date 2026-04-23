@@ -274,56 +274,11 @@ public sealed class BluetoothDeviceService : IDisposable
         }
     }
 
+    // Active codec detection is handled by EtwCodecDetectionService.
+    // This method returns null; ETW events update ActiveCodec during audio playback.
     private static Task<AudioCodecType?> DetectActiveCodecAsync(ulong bluetoothAddress)
     {
-        return Task.Run(() =>
-        {
-            try
-            {
-                string addressHex = bluetoothAddress.ToString("x12");
-
-                // 1. Check per-device preferred codec
-                string devicePath = $@"SYSTEM\CurrentControlSet\Services\BthA2dp\Parameters\{addressHex}";
-                using var deviceKey = Registry.LocalMachine.OpenSubKey(devicePath);
-                if (deviceKey is not null)
-                {
-                    // PreferredCodec is the string key Windows actually uses
-                    if (deviceKey.GetValue("PreferredCodec") is string preferred)
-                    {
-                        var result = ParseCodecName(preferred);
-                        if (result is not null) return result;
-                    }
-                }
-
-                // 2. Check global enabled flags to determine active codec
-                string globalPath = @"SYSTEM\CurrentControlSet\Services\BthA2dp\Parameters";
-                using var globalKey = Registry.LocalMachine.OpenSubKey(globalPath);
-                if (globalKey is not null)
-                {
-                    // Check highest-quality enabled codec first
-                    if (globalKey.GetValue("LDACEnabled") is int ldac && ldac == 1) return (AudioCodecType?)AudioCodecType.LDAC;
-                    if (globalKey.GetValue("AptXHDEnabled") is int aptxhd && aptxhd == 1) return (AudioCodecType?)AudioCodecType.AptXHD;
-                    if (globalKey.GetValue("AptXEnabled") is int aptx && aptx == 1) return (AudioCodecType?)AudioCodecType.AptX;
-                    if (globalKey.GetValue("AACEnabled") is int aac && aac == 1) return (AudioCodecType?)AudioCodecType.AAC;
-                    if (globalKey.GetValue("SBCEnabled") is int sbc && sbc == 1) return (AudioCodecType?)AudioCodecType.SBC;
-                }
-            }
-            catch { }
-            return null;
-        });
-    }
-
-    private static AudioCodecType? ParseCodecName(string name)
-    {
-        return name.ToUpperInvariant() switch
-        {
-            "SBC" => AudioCodecType.SBC,
-            "AAC" => AudioCodecType.AAC,
-            "APTX" or "APT-X" => AudioCodecType.AptX,
-            "APTXHD" or "APTX HD" or "APT-X HD" => AudioCodecType.AptXHD,
-            "LDAC" => AudioCodecType.LDAC,
-            _ => null,
-        };
+        return Task.FromResult<AudioCodecType?>(null);
     }
 
     public void Dispose()
