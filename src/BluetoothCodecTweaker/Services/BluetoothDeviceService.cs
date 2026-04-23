@@ -170,6 +170,7 @@ public sealed class BluetoothDeviceService : IDisposable
         {
             string addressHex = bluetoothAddress.ToString("x12");
 
+            // Check per-device SDP records for codec support
             string registryPath = $@"SYSTEM\CurrentControlSet\Services\BTHPORT\Parameters\Devices\{addressHex}";
             using var key = Registry.LocalMachine.OpenSubKey(registryPath);
             if (key is not null)
@@ -179,25 +180,37 @@ public sealed class BluetoothDeviceService : IDisposable
                     ParseSupportedCodecs(codecBytes, codecs);
             }
 
+            // Check global A2DP enabled codec flags
+            string globalPath = @"SYSTEM\CurrentControlSet\Services\BthA2dp\Parameters";
+            using var globalKey = Registry.LocalMachine.OpenSubKey(globalPath);
+            if (globalKey is not null)
+            {
+                if (globalKey.GetValue("AACEnabled") is int aac && aac == 1 && !codecs.Contains(AudioCodecType.AAC))
+                    codecs.Add(AudioCodecType.AAC);
+                if (globalKey.GetValue("AptXEnabled") is int aptx && aptx == 1 && !codecs.Contains(AudioCodecType.AptX))
+                    codecs.Add(AudioCodecType.AptX);
+                if (globalKey.GetValue("AptXHDEnabled") is int aptxhd && aptxhd == 1 && !codecs.Contains(AudioCodecType.AptXHD))
+                    codecs.Add(AudioCodecType.AptXHD);
+                if (globalKey.GetValue("LDACEnabled") is int ldac && ldac == 1 && !codecs.Contains(AudioCodecType.LDAC))
+                    codecs.Add(AudioCodecType.LDAC);
+            }
+
+            // AAC is nearly universal on modern devices
             if (!codecs.Contains(AudioCodecType.AAC))
                 codecs.Add(AudioCodecType.AAC);
 
+            // Check per-device A2DP parameters
             string a2dpPath = $@"SYSTEM\CurrentControlSet\Services\BthA2dp\Parameters\{addressHex}";
             using var a2dpKey = Registry.LocalMachine.OpenSubKey(a2dpPath);
             if (a2dpKey is not null)
             {
                 foreach (var valueName in a2dpKey.GetValueNames())
                 {
-                    if (valueName.Contains("aptX", StringComparison.OrdinalIgnoreCase) &&
-                        !codecs.Contains(AudioCodecType.AptX))
+                    if (valueName.Contains("aptX", StringComparison.OrdinalIgnoreCase) && !codecs.Contains(AudioCodecType.AptX))
                         codecs.Add(AudioCodecType.AptX);
-
-                    if (valueName.Contains("aptXHD", StringComparison.OrdinalIgnoreCase) &&
-                        !codecs.Contains(AudioCodecType.AptXHD))
+                    if (valueName.Contains("aptXHD", StringComparison.OrdinalIgnoreCase) && !codecs.Contains(AudioCodecType.AptXHD))
                         codecs.Add(AudioCodecType.AptXHD);
-
-                    if (valueName.Contains("LDAC", StringComparison.OrdinalIgnoreCase) &&
-                        !codecs.Contains(AudioCodecType.LDAC))
+                    if (valueName.Contains("LDAC", StringComparison.OrdinalIgnoreCase) && !codecs.Contains(AudioCodecType.LDAC))
                         codecs.Add(AudioCodecType.LDAC);
                 }
             }
@@ -268,39 +281,49 @@ public sealed class BluetoothDeviceService : IDisposable
             try
             {
                 string addressHex = bluetoothAddress.ToString("x12");
-                string registryPath = $@"SYSTEM\CurrentControlSet\Services\BthA2dp\Parameters\{addressHex}";
 
-                using var key = Registry.LocalMachine.OpenSubKey(registryPath);
-                if (key is not null)
+                // 1. Check per-device preferred codec
+                string devicePath = $@"SYSTEM\CurrentControlSet\Services\BthA2dp\Parameters\{addressHex}";
+                using var deviceKey = Registry.LocalMachine.OpenSubKey(devicePath);
+                if (deviceKey is not null)
                 {
-                    var activeCodecValue = key.GetValue("ActiveCodec") ?? key.GetValue("SelectedCodec");
-                    if (activeCodecValue is int codecInt)
+                    // PreferredCodec is the string key Windows actually uses
+                    if (deviceKey.GetValue("PreferredCodec") is string preferred)
                     {
-                        return codecInt switch
-                        {
-                            0 => (AudioCodecType?)AudioCodecType.SBC,
-                            2 => (AudioCodecType?)AudioCodecType.AAC,
-                            _ => (AudioCodecType?)AudioCodecType.SBC,
-                        };
+                        var result = ParseCodecName(preferred);
+                        if (result is not null) return result;
                     }
+                }
 
-                    if (activeCodecValue is string codecStr)
-                    {
-                        return codecStr.ToUpperInvariant() switch
-                        {
-                            "SBC" => (AudioCodecType?)AudioCodecType.SBC,
-                            "AAC" => AudioCodecType.AAC,
-                            "APTX" => AudioCodecType.AptX,
-                            "APTXHD" or "APTX HD" => AudioCodecType.AptXHD,
-                            "LDAC" => AudioCodecType.LDAC,
-                            _ => null,
-                        };
-                    }
+                // 2. Check global enabled flags to determine active codec
+                string globalPath = @"SYSTEM\CurrentControlSet\Services\BthA2dp\Parameters";
+                using var globalKey = Registry.LocalMachine.OpenSubKey(globalPath);
+                if (globalKey is not null)
+                {
+                    // Check highest-quality enabled codec first
+                    if (globalKey.GetValue("LDACEnabled") is int ldac && ldac == 1) return (AudioCodecType?)AudioCodecType.LDAC;
+                    if (globalKey.GetValue("AptXHDEnabled") is int aptxhd && aptxhd == 1) return (AudioCodecType?)AudioCodecType.AptXHD;
+                    if (globalKey.GetValue("AptXEnabled") is int aptx && aptx == 1) return (AudioCodecType?)AudioCodecType.AptX;
+                    if (globalKey.GetValue("AACEnabled") is int aac && aac == 1) return (AudioCodecType?)AudioCodecType.AAC;
+                    if (globalKey.GetValue("SBCEnabled") is int sbc && sbc == 1) return (AudioCodecType?)AudioCodecType.SBC;
                 }
             }
             catch { }
             return null;
         });
+    }
+
+    private static AudioCodecType? ParseCodecName(string name)
+    {
+        return name.ToUpperInvariant() switch
+        {
+            "SBC" => AudioCodecType.SBC,
+            "AAC" => AudioCodecType.AAC,
+            "APTX" or "APT-X" => AudioCodecType.AptX,
+            "APTXHD" or "APTX HD" or "APT-X HD" => AudioCodecType.AptXHD,
+            "LDAC" => AudioCodecType.LDAC,
+            _ => null,
+        };
     }
 
     public void Dispose()
