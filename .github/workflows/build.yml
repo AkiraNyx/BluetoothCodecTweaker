@@ -30,7 +30,7 @@ jobs:
         dotnet-version: '10.0.x'
 
     - name: Restore dependencies
-      run: dotnet restore ${{ env.PROJECT_PATH }} -p:Platform=${{ matrix.platform }}
+      run: dotnet restore ${{ env.PROJECT_PATH }} -p:Platform=${{ matrix.platform }} -p:PublishReadyToRun=true
 
     - name: Build
       run: dotnet build ${{ env.PROJECT_PATH }} -p:Platform=${{ matrix.platform }} -c ${{ matrix.configuration }} --no-restore
