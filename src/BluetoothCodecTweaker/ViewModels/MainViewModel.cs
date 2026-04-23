@@ -61,8 +61,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         try
         {
             var devices = await _deviceService.EnumerateDevicesAsync();
-            Devices.Clear();
-            foreach (var d in devices) Devices.Add(d);
+            Devices = new ObservableCollection<BluetoothAudioDevice>(devices);
             _deviceService.StartWatching();
         }
         catch (Exception ex)
@@ -84,8 +83,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
             _deviceService.StopWatching();
             var devices = await _deviceService.EnumerateDevicesAsync();
             var previousSelectedId = SelectedDevice?.Id;
-            Devices.Clear();
-            foreach (var d in devices) Devices.Add(d);
+            Devices = new ObservableCollection<BluetoothAudioDevice>(devices);
             _deviceService.StartWatching();
 
             if (previousSelectedId is not null)
