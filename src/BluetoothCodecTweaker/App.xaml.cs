@@ -9,11 +9,18 @@ public partial class App : Application
     public App()
     {
         InitializeComponent();
+        UnhandledException += OnUnhandledException;
     }
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
         _window = new MainWindow();
         _window.Activate();
+    }
+
+    private void OnUnhandledException(object sender, Microsoft.UI.Xaml.UnhandledExceptionEventArgs e)
+    {
+        e.Handled = true;
+        System.Diagnostics.Debug.WriteLine($"[UnhandledException] {e.Exception}");
     }
 }

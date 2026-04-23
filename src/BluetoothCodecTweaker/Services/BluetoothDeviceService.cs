@@ -28,21 +28,29 @@ public sealed class BluetoothDeviceService : IDisposable
     {
         if (_watcher is not null) return;
 
-        // AQS filter for Bluetooth A2DP audio devices (AudioRender)
-        string aqsFilter = BluetoothDevice.GetDeviceSelectorFromPairingState(true);
-        string[] requestedProperties =
-        [
-            "System.Devices.Aep.IsConnected",
-            "System.Devices.Aep.DeviceAddress",
-            "System.Devices.Aep.Bluetooth.Le.IsConnectable",
-        ];
+        try
+        {
+            // AQS filter for Bluetooth A2DP audio devices (AudioRender)
+            string aqsFilter = BluetoothDevice.GetDeviceSelectorFromPairingState(true);
+            string[] requestedProperties =
+            [
+                "System.Devices.Aep.IsConnected",
+                "System.Devices.Aep.DeviceAddress",
+                "System.Devices.Aep.Bluetooth.Le.IsConnectable",
+            ];
 
-        _watcher = DeviceInformation.CreateWatcher(aqsFilter, requestedProperties);
-        _watcher.Added += OnDeviceAdded;
-        _watcher.Updated += OnDeviceUpdated;
-        _watcher.Removed += OnDeviceRemoved;
-        _watcher.EnumerationCompleted += (_, _) => DevicesChanged?.Invoke();
-        _watcher.Start();
+            _watcher = DeviceInformation.CreateWatcher(aqsFilter, requestedProperties);
+            _watcher.Added += OnDeviceAdded;
+            _watcher.Updated += OnDeviceUpdated;
+            _watcher.Removed += OnDeviceRemoved;
+            _watcher.EnumerationCompleted += (_, _) => DevicesChanged?.Invoke();
+            _watcher.Start();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[BluetoothDeviceService] StartWatching failed: {ex.Message}");
+            DevicesChanged?.Invoke();
+        }
     }
 
     public void StopWatching()

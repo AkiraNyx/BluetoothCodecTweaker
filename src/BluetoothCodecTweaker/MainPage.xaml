@@ -133,7 +133,7 @@
                                     Padding="8,4"
                                     CornerRadius="4"
                                     Background="{ThemeResource SystemFillColorSuccessBackgroundBrush}"
-                                    Visibility="{Binding IsConnected}">
+                                    Visibility="{Binding IsConnected, Converter={StaticResource BoolToVisibilityConverter}}">
                                     <TextBlock
                                         Text="{Binding ConnectionStatusDisplay}"
                                         Style="{StaticResource CaptionTextBlockStyle}"
