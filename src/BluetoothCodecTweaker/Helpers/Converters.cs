@@ -39,7 +39,8 @@ public sealed class NullToVisibilityConverter : IValueConverter
     {
         bool invert = parameter is string s && s == "Invert";
         bool isNull = value is null;
-        return invert ? isNull : !isNull;
+        bool show = invert ? isNull : !isNull;
+        return show ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
     }
 
     public object ConvertBack(object value, Type targetType, object parameter, string language)
@@ -64,7 +65,7 @@ public sealed class ConnectionStatusToGlyphConverter : IValueConverter
 {
     public object Convert(object value, Type targetType, object parameter, string language)
     {
-        return value is true ? "\uE702" : "\uE703"; // Bluetooth / BluetoothDisabled
+        return value is true ? "\uE702" : "\uE703";
     }
 
     public object ConvertBack(object value, Type targetType, object parameter, string language)

@@ -12,6 +12,10 @@ public sealed partial class MainPage : Page
     {
         ViewModel = new MainViewModel(DispatcherQueue);
         InitializeComponent();
+
+        // Set ItemsSource in code-behind to avoid x:Bind timing issues
+        DeviceSelector.ItemsSource = ViewModel.Devices;
+
         Loaded += OnLoaded;
     }
 

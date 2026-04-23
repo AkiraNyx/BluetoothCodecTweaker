@@ -12,19 +12,19 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private readonly CodecSwitchService _codecService;
     private readonly Microsoft.UI.Dispatching.DispatcherQueue _dispatcherQueue;
 
-    [ObservableProperty]
-    public partial ObservableCollection<BluetoothAudioDevice> Devices { get; set; } = [];
+    public ObservableCollection<BluetoothAudioDevice> Devices { get; } = [];
+    public ObservableCollection<CodecOption> CodecOptions { get; } = [];
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SelectedDeviceCodecDisplay))]
+    [NotifyPropertyChangedFor(nameof(SelectedDeviceConnectionDisplay))]
+    [NotifyPropertyChangedFor(nameof(HasSelectedDevice))]
     [NotifyCanExecuteChangedFor(nameof(SwitchCodecCommand))]
     public partial BluetoothAudioDevice? SelectedDevice { get; set; }
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(SwitchCodecCommand))]
     public partial AudioCodecInfo? SelectedCodec { get; set; }
-
-    [ObservableProperty]
-    public partial ObservableCollection<CodecOption> CodecOptions { get; set; } = [];
 
     [ObservableProperty]
     public partial bool IsLoading { get; set; }
@@ -47,13 +47,22 @@ public partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     public partial bool ShowFallbackButton { get; set; }
 
+    // Safe non-chained properties for x:Bind (no SelectedDevice.XXX chains)
+    public string SelectedDeviceCodecDisplay => SelectedDevice?.ActiveCodecDisplay ?? "";
+    public string SelectedDeviceConnectionDisplay => SelectedDevice?.ConnectionStatusDisplay ?? "";
+    public bool HasSelectedDevice => SelectedDevice is not null;
+
     public MainViewModel(Microsoft.UI.Dispatching.DispatcherQueue dispatcherQueue)
     {
         _dispatcherQueue = dispatcherQueue;
         _deviceService = new BluetoothDeviceService();
         _codecService = new CodecSwitchService();
 
-        _deviceService.StatusChanged += msg => _dispatcherQueue.TryEnqueue(() => StatusMessage = msg);
+        _deviceService.StatusChanged += msg =>
+        {
+            if (_dispatcherQueue is not null)
+                _dispatcherQueue.TryEnqueue(() => StatusMessage = msg);
+        };
     }
 
     [RelayCommand]
@@ -64,7 +73,9 @@ public partial class MainViewModel : ObservableObject, IDisposable
         try
         {
             var devices = await _deviceService.EnumerateDevicesAsync();
-            Devices = new ObservableCollection<BluetoothAudioDevice>(devices);
+            Devices.Clear();
+            foreach (var d in devices)
+                Devices.Add(d);
             _deviceService.StartWatching();
         }
         catch (Exception ex)
@@ -85,13 +96,14 @@ public partial class MainViewModel : ObservableObject, IDisposable
             _deviceService.StopWatching();
             var devices = await _deviceService.EnumerateDevicesAsync();
             var previousSelectedId = SelectedDevice?.Id;
-            Devices = new ObservableCollection<BluetoothAudioDevice>(devices);
+            SelectedDevice = null;
+            Devices.Clear();
+            foreach (var d in devices)
+                Devices.Add(d);
             _deviceService.StartWatching();
 
             if (previousSelectedId is not null)
-            {
                 SelectedDevice = Devices.FirstOrDefault(d => d.Id == previousSelectedId);
-            }
 
             if (Devices.Count > 0)
                 ShowInfoBar("刷新完成", $"已找到 {Devices.Count} 个蓝牙音频设备", InfoBarState.Success);
@@ -121,20 +133,16 @@ public partial class MainViewModel : ObservableObject, IDisposable
             bool isSupported = SelectedDevice.SupportsCodec(codecInfo.Type);
             bool isActive = SelectedDevice.ActiveCodec == codecInfo.Type;
 
-            CodecOptions.Add(new CodecOption
-            {
-                CodecInfo = codecInfo,
-                IsSupported = isSupported,
-                IsActive = isActive,
-                IsEnabled = isSupported && SelectedDevice.IsConnected,
-            });
+            CodecOptions.Add(new CodecOption(
+                codecInfo,
+                isSupported,
+                isActive,
+                isSupported && SelectedDevice.IsConnected));
         }
 
         var activeOption = CodecOptions.FirstOrDefault(c => c.IsActive);
         if (activeOption is not null)
-        {
-            SelectedCodec = activeOption.CodecInfo;
-        }
+            SelectedCodec = activeOption.Info;
     }
 
     private bool CanSwitchCodec() =>
@@ -199,7 +207,6 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private async Task FallbackToAacAsync()
     {
         if (SelectedDevice is null) return;
-
         ShowFallbackButton = false;
         SelectedCodec = AudioCodecInfo.AAC;
         await SwitchCodecAsync();
@@ -234,22 +241,24 @@ public enum InfoBarState
     Error,
 }
 
-public partial class CodecOption : ObservableObject
+// Simple record-like class for codec options displayed in the list
+public sealed class CodecOption
 {
-    [ObservableProperty]
-    public partial AudioCodecInfo CodecInfo { get; set; }
+    public AudioCodecInfo Info { get; }
+    public string DisplayName => Info.DisplayName;
+    public string Description => Info.Description;
+    public string BitrateDisplay => Info.BitrateDisplay;
+    public string QualityDisplay => Info.QualityDisplay;
+    public bool IsNativelySupported => Info.IsNativelySupported;
+    public bool IsSupported { get; }
+    public bool IsActive { get; }
+    public bool IsEnabled { get; }
 
-    [ObservableProperty]
-    public partial bool IsSupported { get; set; }
-
-    [ObservableProperty]
-    public partial bool IsActive { get; set; }
-
-    [ObservableProperty]
-    public partial bool IsEnabled { get; set; }
-
-    public CodecOption()
+    public CodecOption(AudioCodecInfo info, bool isSupported, bool isActive, bool isEnabled)
     {
-        CodecInfo = AudioCodecInfo.SBC;
+        Info = info;
+        IsSupported = isSupported;
+        IsActive = isActive;
+        IsEnabled = isEnabled;
     }
 }
