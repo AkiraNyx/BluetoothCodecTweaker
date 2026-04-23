@@ -10,6 +10,7 @@ on:
 env:
   PROJECT_PATH: src/BluetoothCodecTweaker/BluetoothCodecTweaker.csproj
   SOLUTION_PATH: BluetoothCodecTweaker.slnx
+  PUBLISHER: CN=AkiraNyx
 
 jobs:
   build:
@@ -29,6 +30,26 @@ jobs:
       with:
         dotnet-version: '10.0.x'
 
+    - name: Create self-signed certificate
+      run: |
+        $cert = New-SelfSignedCertificate `
+          -Type Custom `
+          -Subject "${{ env.PUBLISHER }}" `
+          -KeyUsage DigitalSignature `
+          -FriendlyName "BluetoothCodecTweaker Dev Certificate" `
+          -CertStoreLocation "Cert:\CurrentUser\My" `
+          -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.3", "2.5.29.19={text}")
+        $thumbprint = $cert.Thumbprint
+        echo "CERT_THUMBPRINT=$thumbprint" >> $env:GITHUB_ENV
+
+        # Export .cer (public key) for users to install
+        Export-Certificate -Cert $cert -FilePath "${{ github.workspace }}\BluetoothCodecTweaker_Dev.cer" -Type CERT
+
+        # Export .pfx for signing
+        $password = ConvertTo-SecureString -String "msix-build" -Force -AsPlainText
+        Export-PfxCertificate -Cert $cert -FilePath "${{ github.workspace }}\signing.pfx" -Password $password
+      shell: pwsh
+
     - name: Restore dependencies
       run: dotnet restore ${{ env.PROJECT_PATH }} -p:Platform=${{ matrix.platform }} -p:PublishReadyToRun=true
 
@@ -43,7 +64,9 @@ jobs:
           -p:AppxPackageDir=..\..\artifacts\${{ matrix.platform }}\ `
           -p:GenerateAppxPackageOnBuild=true `
           -p:AppxBundle=Never `
-          -p:AppxPackageSigningEnabled=false
+          -p:AppxPackageSigningEnabled=true `
+          -p:PackageCertificateThumbprint=${{ env.CERT_THUMBPRINT }}
+      shell: pwsh
 
     - name: Upload MSIX artifact
       uses: actions/upload-artifact@v4
@@ -51,3 +74,9 @@ jobs:
         name: BluetoothCodecTweaker-${{ matrix.platform }}-${{ matrix.configuration }}
         path: artifacts/${{ matrix.platform }}/**/*.msix
         if-no-files-found: warn
+
+    - name: Upload signing certificate (public key)
+      uses: actions/upload-artifact@v4
+      with:
+        name: DevCertificate
+        path: BluetoothCodecTweaker_Dev.cer
