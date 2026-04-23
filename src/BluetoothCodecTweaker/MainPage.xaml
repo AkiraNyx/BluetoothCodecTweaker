@@ -37,7 +37,7 @@
             <InfoBar
                 x:Name="StatusInfoBar"
                 Title="{x:Bind ViewModel.InfoBarTitle, Mode=OneWay}"
-                Message="{x:Bind ViewModel.StatusMessage, Mode=OneWay}"
+                Message="{x:Bind ViewModel.InfoBarMessage, Mode=OneWay}"
                 Severity="{x:Bind ViewModel.InfoBarState, Mode=OneWay, Converter={StaticResource InfoBarSeverityConverter}}"
                 IsOpen="{x:Bind ViewModel.InfoBarState, Mode=OneWay, Converter={StaticResource InfoBarVisibilityConverter}}"
                 IsClosable="True">

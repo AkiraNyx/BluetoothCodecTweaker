@@ -42,6 +42,9 @@ public partial class MainViewModel : ObservableObject, IDisposable
     public partial string InfoBarTitle { get; set; } = string.Empty;
 
     [ObservableProperty]
+    public partial string InfoBarMessage { get; set; } = string.Empty;
+
+    [ObservableProperty]
     public partial bool ShowFallbackButton { get; set; }
 
     public MainViewModel(Microsoft.UI.Dispatching.DispatcherQueue dispatcherQueue)
@@ -66,8 +69,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         }
         catch (Exception ex)
         {
-            StatusMessage = $"初始化失败: {ex.Message}";
-            ShowInfoBar("初始化失败", StatusMessage, InfoBarState.Error);
+            ShowInfoBar("初始化失败", $"{ex.GetType().Name}: {ex.Message}", InfoBarState.Error);
         }
         IsLoading = false;
     }
@@ -92,14 +94,13 @@ public partial class MainViewModel : ObservableObject, IDisposable
             }
 
             if (Devices.Count > 0)
-                ShowInfoBar("刷新完成", StatusMessage, InfoBarState.Success);
+                ShowInfoBar("刷新完成", $"已找到 {Devices.Count} 个蓝牙音频设备", InfoBarState.Success);
             else
                 ShowInfoBar("未找到设备", StatusMessage, InfoBarState.Warning);
         }
         catch (Exception ex)
         {
-            StatusMessage = $"刷新失败: {ex.Message}";
-            ShowInfoBar("刷新失败", StatusMessage, InfoBarState.Error);
+            ShowInfoBar("刷新失败", $"{ex.GetType().Name}: {ex.Message}", InfoBarState.Error);
         }
         IsLoading = false;
     }
@@ -207,7 +208,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private void ShowInfoBar(string title, string message, InfoBarState state)
     {
         InfoBarTitle = title;
-        StatusMessage = message;
+        InfoBarMessage = message;
         InfoBarState = state;
         ShowFallbackButton = false;
     }
