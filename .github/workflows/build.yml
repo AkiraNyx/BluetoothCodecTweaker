@@ -1,0 +1,53 @@
+name: Build MSIX
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  PROJECT_PATH: src/BluetoothCodecTweaker/BluetoothCodecTweaker.csproj
+  SOLUTION_PATH: BluetoothCodecTweaker.slnx
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        platform: [x64, ARM64]
+        configuration: [Release]
+
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Setup .NET 10
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '10.0.x'
+
+    - name: Restore dependencies
+      run: dotnet restore ${{ env.PROJECT_PATH }} -p:Platform=${{ matrix.platform }}
+
+    - name: Build
+      run: dotnet build ${{ env.PROJECT_PATH }} -p:Platform=${{ matrix.platform }} -c ${{ matrix.configuration }} --no-restore
+
+    - name: Create MSIX package
+      run: |
+        dotnet publish ${{ env.PROJECT_PATH }} `
+          -p:Platform=${{ matrix.platform }} `
+          -c ${{ matrix.configuration }} `
+          -p:AppxPackageDir=..\..\artifacts\${{ matrix.platform }}\ `
+          -p:GenerateAppxPackageOnBuild=true `
+          -p:AppxBundle=Never `
+          -p:AppxPackageSigningEnabled=false
+
+    - name: Upload MSIX artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: BluetoothCodecTweaker-${{ matrix.platform }}-${{ matrix.configuration }}
+        path: artifacts/${{ matrix.platform }}/**/*.msix
+        if-no-files-found: warn

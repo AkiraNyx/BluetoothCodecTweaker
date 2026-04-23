@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "BluetoothCodecTweaker (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "BluetoothCodecTweaker (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}
